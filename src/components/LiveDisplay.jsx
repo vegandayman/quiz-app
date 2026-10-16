@@ -398,6 +398,9 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
             <span className="px-3.5 py-1.5 rounded-xl bg-purple-900/60 border border-purple-700 text-purple-200 text-sm font-bold">
               Question {currentQIndex + 1} of {roomData.questions?.length || 1}
             </span>
+            <span className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
+              {currentQuestion?.points !== undefined ? currentQuestion.points : 1000} pts
+            </span>
           </div>
 
           {!isReveal ? (

@@ -87,11 +87,18 @@ const ClockIcon = ({ className = 'w-4 h-4' }) => (
   </svg>
 );
 
+const AwardIcon = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="6" />
+    <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+  </svg>
+);
+
 const shapes = [
-  { symbol: '▲', label: 'Triangle', color: 'text-red-400' },
-  { symbol: '◆', label: 'Diamond', color: 'text-blue-400' },
-  { symbol: '●', label: 'Circle', color: 'text-amber-400' },
-  { symbol: '■', label: 'Square', color: 'text-emerald-400' }
+  { symbol: '▲', label: 'Triangle', color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/40' },
+  { symbol: '◆', label: 'Diamond', color: 'text-blue-400', bg: 'bg-blue-500/20', border: 'border-blue-500/40' },
+  { symbol: '●', label: 'Circle', color: 'text-amber-400', bg: 'bg-amber-500/20', border: 'border-amber-500/40' },
+  { symbol: '■', label: 'Square', color: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/40' }
 ];
 
 const defaultQuestions = [
@@ -100,6 +107,7 @@ const defaultQuestions = [
     question: 'Which planet in our solar system has the most moons?',
     options: ['Jupiter', 'Saturn', 'Neptune', 'Mars'],
     correctIndex: 1,
+    points: 1000,
     secretNote: 'Saturn has 146 confirmed moons, overtaking Jupiter (95 moons) in 2023!',
     timeLimit: 20
   },
@@ -108,6 +116,7 @@ const defaultQuestions = [
     question: 'What was the first video game ever played in outer space?',
     options: ['Tetris', 'Pac-Man', 'Pong', 'Space Invaders'],
     correctIndex: 0,
+    points: 1000,
     secretNote: 'Russian cosmonaut Aleksandr Serebrov played Tetris on his Game Boy aboard the Mir Space Station in 1993.',
     timeLimit: 20
   },
@@ -116,6 +125,7 @@ const defaultQuestions = [
     question: 'How many hearts does an octopus have?',
     options: ['One', 'Two', 'Three', 'Four'],
     correctIndex: 2,
+    points: 1000,
     secretNote: 'Two hearts pump blood to the gills, while the third circulates it to the rest of the body.',
     timeLimit: 20
   },
@@ -124,6 +134,7 @@ const defaultQuestions = [
     question: 'Which programming language was created in only 10 days in May 1995?',
     options: ['Python', 'JavaScript', 'Java', 'PHP'],
     correctIndex: 1,
+    points: 1000,
     secretNote: 'Brendan Eich designed Mocha (which became JavaScript) in 10 days for Netscape Navigator.',
     timeLimit: 20
   }
@@ -134,7 +145,7 @@ const defaultQuestions = [
  * 
  * Master Controller for running Kahoot-style multiplayer quizzes:
  * - Starts quiz and launches questions
- * - Tracks answers in real-time
+ * - Shows incoming player names and their selected answers in real time
  * - Displays secret answers and host trivia facts
  * - Reveals answers on the big screen
  * - Shows live leaderboards and advances rounds
@@ -251,14 +262,22 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   const nextQuestion = activeQuestions[currentQIndex + 1] || null;
   const status = roomData?.status || 'lobby';
 
-  // Count choices submitted by players for current question
+  // Count choices and group players by choice for the current question
   const choiceTally = [0, 0, 0, 0];
+  const choicePlayers = [[], [], [], []];
   let totalSubmitted = 0;
 
   players.forEach((p) => {
     const answer = p.answers?.[currentQIndex];
     if (answer !== undefined && answer.choiceIndex !== undefined) {
       choiceTally[answer.choiceIndex] = (choiceTally[answer.choiceIndex] || 0) + 1;
+      choicePlayers[answer.choiceIndex].push({
+        id: p.id,
+        name: p.name,
+        isCorrect: answer.isCorrect,
+        pointsAwarded: answer.pointsAwarded,
+        answeredAt: answer.answeredAt
+      });
       totalSubmitted++;
     }
   });
@@ -270,11 +289,9 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   // ----------------------------------------------------
 
   // 1. START QUIZ (Lobby -> Question 1)
-  // Cleans all player scores & answers for a fresh game
   const handleStartQuiz = async () => {
     const roomRef = ref(db, `rooms/${roomCode}`);
 
-    // Reset all players' scores and answers in Firebase
     const resetPlayersUpdates = {};
     if (roomData?.players) {
       Object.keys(roomData.players).forEach((playerId) => {
@@ -360,7 +377,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                 Private Host Screen
               </span>
             </div>
-            <p className="text-xs text-slate-400">Controls live game & displays secret answers</p>
+            <p className="text-xs text-slate-400">Controls live game & monitors real-time player answers</p>
           </div>
         </div>
 
@@ -459,6 +476,9 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                     <span className="px-2.5 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold flex items-center gap-1.5">
                       <ClockIcon className="w-3.5 h-3.5 text-purple-400" />
                       <span>{timeLeft}s</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
+                      {activeQuestion.points !== undefined ? activeQuestion.points : 1000} pts
                     </span>
                   </div>
 
@@ -614,23 +634,34 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                   Upcoming: Question {currentQIndex + 2} Preview
                 </span>
                 <p className="font-bold text-white text-sm mt-1">{nextQuestion.question}</p>
-                <p className="text-xs text-emerald-400 mt-1">
-                  Correct Answer: {nextQuestion.options[nextQuestion.correctIndex]}
-                </p>
+                <div className="flex items-center gap-3 mt-1 text-xs">
+                  <span className="text-emerald-400 font-semibold">
+                    Correct Answer: {nextQuestion.options[nextQuestion.correctIndex]}
+                  </span>
+                  <span className="text-amber-400 font-mono">
+                    ({nextQuestion.points ?? 1000} pts)
+                  </span>
+                </div>
               </div>
             )}
           </div>
         )}
 
         {/* ======================================================== */}
-        {/* CONFIDENTIAL ANSWER KEY & HOST TRIVIA NOTES */}
+        {/* CONFIDENTIAL ANSWER KEY & REAL-TIME PLAYER SELECTIONS */}
         {/* ======================================================== */}
         {activeQuestion && status !== 'finished' && (
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold">
-                QUESTION {currentQIndex + 1} OF {activeQuestions.length}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold">
+                  QUESTION {currentQIndex + 1} OF {activeQuestions.length}
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-bold flex items-center gap-1">
+                  <AwardIcon className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{activeQuestion.points !== undefined ? activeQuestion.points : 1000} pts</span>
+                </span>
+              </div>
 
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
                 <EyeIcon className="w-4 h-4 text-amber-400" />
@@ -642,40 +673,125 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               {activeQuestion.question}
             </h2>
 
-            {/* Answer Options with SECRET HIGHLIGHT */}
+            {/* Answer Options with SECRET HIGHLIGHT + PLAYER NAMES WHO PICKED EACH */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {activeQuestion.options.map((option, idx) => {
                 const isCorrect = idx === activeQuestion.correctIndex;
                 const votesCount = choiceTally[idx] || 0;
+                const voters = choicePlayers[idx] || [];
                 const shape = shapes[idx] || shapes[0];
 
                 return (
                   <div
                     key={idx}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${
+                    className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all ${
                       isCorrect
                         ? 'bg-emerald-950/60 border-emerald-500 ring-2 ring-emerald-500/30 text-white shadow-lg'
                         : 'bg-slate-950/80 border-slate-800 text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs font-mono font-bold ${shape.color}`}>{shape.symbol} {shape.label}</span>
-                      <span className="font-bold text-sm">{option}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs font-mono font-bold ${shape.color}`}>{shape.symbol} {shape.label}</span>
+                        <span className="font-bold text-sm">{option}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isCorrect && (
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                            CORRECT ✓
+                          </span>
+                        )}
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-mono text-slate-300">
+                          {votesCount} {votesCount === 1 ? 'vote' : 'votes'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {isCorrect && (
-                        <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider">
-                          CORRECT ✓
+                    {/* Real-time player badges under this option */}
+                    {voters.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                          Chosen by:
                         </span>
-                      )}
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs font-mono text-slate-300">
-                        {votesCount} {votesCount === 1 ? 'vote' : 'votes'}
-                      </span>
-                    </div>
+                        {voters.map((v) => (
+                          <span
+                            key={v.id}
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                              isCorrect
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
+                                : 'bg-rose-500/20 border-rose-500/40 text-rose-200'
+                            }`}
+                          >
+                            {v.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
+            </div>
+
+            {/* Real-time Live Incoming Answers Feed */}
+            <div className="mt-4 p-4 rounded-2xl bg-slate-950/90 border border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Incoming Answers Feed ({totalSubmitted} of {players.length} answered)
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">Real-time Firebase update</span>
+              </div>
+
+              {players.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No players in the room yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+                  {players.map((p) => {
+                    const ans = p.answers?.[currentQIndex];
+                    const hasAnswered = ans !== undefined && ans.choiceIndex !== undefined;
+                    const choiceShape = hasAnswered ? shapes[ans.choiceIndex] : null;
+                    const choiceText = hasAnswered ? activeQuestion.options[ans.choiceIndex] : '';
+                    const isCorrect = hasAnswered && ans.choiceIndex === activeQuestion.correctIndex;
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 transition-all ${
+                          hasAnswered
+                            ? isCorrect
+                              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-100'
+                              : 'bg-rose-950/40 border-rose-500/40 text-rose-100'
+                            : 'bg-slate-900/60 border-slate-800/80 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${hasAnswered ? (isCorrect ? 'bg-emerald-400' : 'bg-rose-400') : 'bg-amber-400 animate-ping'}`} />
+                          <span className="font-bold text-white truncate">{p.name}</span>
+                        </div>
+
+                        {hasAnswered ? (
+                          <div className="flex items-center gap-1.5 shrink-0 font-mono font-bold">
+                            <span className={`px-1.5 py-0.5 rounded ${choiceShape?.bg} ${choiceShape?.color} border ${choiceShape?.border}`}>
+                              {choiceShape?.symbol}
+                            </span>
+                            <span className="truncate max-w-[80px]" title={choiceText}>
+                              {choiceText}
+                            </span>
+                            <span className={isCorrect ? 'text-emerald-400' : 'text-rose-400'}>
+                              {isCorrect ? '✓' : '✗'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-amber-400/80 font-medium italic shrink-0">
+                            Thinking...
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* SECRET HOST TRIVIA FACT */}

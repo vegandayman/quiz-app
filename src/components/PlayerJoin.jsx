@@ -71,7 +71,7 @@ const answerButtons = [
  * - Handles entering 4-digit PIN and nickname
  * - Live synchronized answering on player mobile screen
  * - Real-time countdown timer bar
- * - Speed bonus calculation
+ * - Dynamic score calculation based on question points and speed bonus
  * - Dynamic feedback for Reveal, Leaderboard, and Final Winner Podium
  */
 export default function PlayerJoin({ initialRoomCode = '' }) {
@@ -231,7 +231,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
     return () => clearInterval(interval);
   }, [roomData?.status, roomData?.questionStartTime, roomData?.timeLimit]);
 
-  // Handle Player Tapping an Answer Button with speed-based Kahoot scoring
+  // Handle Player Tapping an Answer Button with speed-based Kahoot scoring and custom question points
   const handleSelectAnswer = async (choiceIndex) => {
     if (myAnswer !== null || !roomData || timeLeft <= 0) return;
 
@@ -239,12 +239,13 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
     const currentQ = roomData.questions?.[currentQIndex];
     const isCorrect = choiceIndex === currentQ?.correctIndex;
 
-    // Speed bonus: answering faster yields between 500 and 1000 points
-    const timeLimit = roomData.timeLimit || 20;
+    // Use custom question points (defaults to 1000 if not specified in editor)
+    const maxPoints = currentQ?.points !== undefined ? currentQ.points : 1000;
+    const timeLimit = roomData.timeLimit || currentQ?.timeLimit || 20;
     const startTime = roomData.questionStartTime || Date.now();
     const timeElapsedSec = Math.max(0, (Date.now() - startTime) / 1000);
     const speedRatio = Math.max(0, Math.min(1, 1 - (timeElapsedSec / timeLimit) / 2));
-    const pointsAwarded = isCorrect ? Math.round(1000 * speedRatio) : 0;
+    const pointsAwarded = isCorrect ? Math.round(maxPoints * speedRatio) : 0;
 
     setMyAnswer(choiceIndex);
 
@@ -255,8 +256,10 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
       score: currentScore + pointsAwarded,
       [`answers/${currentQIndex}`]: {
         choiceIndex,
+        choiceText: currentQ?.options?.[choiceIndex] || '',
         isCorrect,
         pointsAwarded,
+        timeElapsedSec: parseFloat(timeElapsedSec.toFixed(1)),
         answeredAt: Date.now()
       }
     });
@@ -348,11 +351,16 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
         {/* 2. QUESTION SCREEN */}
         {status === 'question' && (
           <main className="my-auto w-full max-w-md mx-auto flex flex-col items-center">
-            {/* Header: Question Number & Live Timer Bar */}
+            {/* Header: Question Number, Points Value & Live Timer Bar */}
             <div className="w-full flex items-center justify-between mb-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-purple-400">
-                Question {currentQIndex + 1}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                  Question {currentQIndex + 1}
+                </p>
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono text-amber-300 font-bold">
+                  {currentQuestion?.points !== undefined ? currentQuestion.points : 1000} pts
+                </span>
+              </div>
               <span className={`text-xs font-mono font-bold ${timeLeft <= 5 ? 'text-rose-400 animate-ping' : 'text-slate-400'}`}>
                 {timeLeft}s
               </span>
@@ -419,7 +427,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
                 <CheckCircleIcon className="w-16 h-16 text-emerald-400 mx-auto mb-3" />
                 <h2 className="text-2xl font-black text-white">Correct!</h2>
                 <p className="text-lg font-black text-emerald-400 mt-1">
-                  +{lastAnswerObj?.pointsAwarded || 1000} Points
+                  +{lastAnswerObj?.pointsAwarded ?? (currentQuestion?.points || 1000)} Points
                 </p>
                 <p className="text-xs text-slate-400 mt-2">
                   Total Score: <span className="text-purple-300 font-mono font-bold">{myPlayerObj?.score || 0} pts</span>

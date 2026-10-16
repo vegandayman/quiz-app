@@ -44,6 +44,13 @@ const XIcon = ({ className = 'w-5 h-5' }) => (
   </svg>
 );
 
+const AwardIcon = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="6" />
+    <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+  </svg>
+);
+
 const shapes = [
   { symbol: '▲', label: 'Red Triangle', bg: 'bg-red-600', ring: 'ring-red-500' },
   { symbol: '◆', label: 'Blue Diamond', bg: 'bg-blue-600', ring: 'ring-blue-500' },
@@ -55,15 +62,20 @@ const shapes = [
  * QuizMaker Component
  * 
  * - Full quiz builder for multiple choice questions
- * - Supports saving to the live quiz
+ * - Configurable score points per question (e.g. 500, 1000, 1500, 2000 pts)
+ * - Configurable time limits per question
  * - Exports quiz as JSON file (.json)
  * - Imports previously saved JSON files to resume editing or play
+ * - Saves directly to the live Firebase room
  */
 export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }) {
   const [quizTitle, setQuizTitle] = useState('My Custom Quiz');
   const [questions, setQuestions] = useState(() => {
     if (initialQuestions && initialQuestions.length > 0) {
-      return JSON.parse(JSON.stringify(initialQuestions));
+      return JSON.parse(JSON.stringify(initialQuestions)).map((q) => ({
+        ...q,
+        points: q.points !== undefined ? q.points : 1000
+      }));
     }
     return [
       {
@@ -71,6 +83,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         question: 'What is the capital of France?',
         options: ['London', 'Paris', 'Berlin', 'Madrid'],
         correctIndex: 1,
+        points: 1000,
         secretNote: 'Paris has been the capital of France since 987 CE.',
         timeLimit: 20
       }
@@ -88,13 +101,14 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     setTimeout(() => setNotification(''), 3000);
   };
 
-  // Add new blank question
+  // Add new blank question with default 1000 points
   const handleAddQuestion = () => {
     const newQuestion = {
       id: Date.now(),
       question: 'New Question',
       options: ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
       correctIndex: 0,
+      points: 1000,
       secretNote: '',
       timeLimit: 20
     };
@@ -133,11 +147,11 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     setQuestions(updated);
   };
 
-  // Export Quiz as JSON
+  // Export Quiz as JSON (including points)
   const handleExportJSON = () => {
     const exportData = {
       title: quizTitle,
-      version: '1.0',
+      version: '1.1',
       exportedAt: new Date().toISOString(),
       questions: questions
     };
@@ -155,7 +169,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     showNotification(`Exported as "${filename}"!`);
   };
 
-  // Import Quiz from JSON
+  // Import Quiz from JSON (with points backwards-compatibility)
   const handleImportJSON = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -165,7 +179,6 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
       try {
         const parsed = JSON.parse(event.target?.result);
 
-        // Check if format is { questions: [...] } or array [...]
         let loadedQuestions = [];
         if (Array.isArray(parsed)) {
           loadedQuestions = parsed;
@@ -177,12 +190,13 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
           return;
         }
 
-        // Validate basic question structure
+        // Validate basic question structure and assign default points if missing
         const validated = loadedQuestions.map((q, idx) => ({
           id: q.id || idx + 1,
           question: q.question || `Question ${idx + 1}`,
           options: Array.isArray(q.options) && q.options.length >= 2 ? q.options.slice(0, 4) : ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
           correctIndex: typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < 4 ? q.correctIndex : 0,
+          points: typeof q.points === 'number' ? q.points : 1000,
           secretNote: q.secretNote || '',
           timeLimit: q.timeLimit || 20
         }));
@@ -196,7 +210,6 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
       }
     };
     reader.readAsText(file);
-    // Reset file input so user can import the same file again if edited
     e.target.value = '';
   };
 
@@ -315,23 +328,30 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
                       : 'bg-slate-950/60 border border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
-                  <span className="truncate flex-1 pr-2">
-                    {idx + 1}. {q.question || 'Untitled Question'}
-                  </span>
+                  <div className="truncate flex-1 pr-2 flex items-center gap-1.5">
+                    <span className="font-mono text-purple-300">{idx + 1}.</span>
+                    <span className="truncate">{q.question || 'Untitled Question'}</span>
+                  </div>
 
-                  {questions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteQuestion(idx);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-1 cursor-pointer transition-opacity"
-                      title="Delete Question"
-                    >
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900/70 border border-slate-700/60 text-amber-300">
+                      {q.points ?? 1000}p
+                    </span>
+
+                    {questions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteQuestion(idx);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-1 cursor-pointer transition-opacity"
+                        title="Delete Question"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -349,26 +369,45 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
 
         {/* Right Editor Area */}
         <main className="flex-1 overflow-y-auto p-6 sm:p-10 max-w-4xl mx-auto w-full space-y-6">
-          {/* Question Text & Time Limit Header */}
+          {/* Question Text, Points & Time Limit Header */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs font-mono font-bold uppercase text-purple-400">
                 Question #{activeIdx + 1}
               </span>
 
-              {/* Time limit picker */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-400 font-semibold">Time limit:</label>
-                <select
-                  value={activeQ.timeLimit || 20}
-                  onChange={(e) => handleUpdateActiveQuestion('timeLimit', Number(e.target.value))}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-white outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  <option value={10}>10 seconds</option>
-                  <option value={20}>20 seconds</option>
-                  <option value={30}>30 seconds</option>
-                  <option value={60}>60 seconds</option>
-                </select>
+              <div className="flex items-center flex-wrap gap-4">
+                {/* Score / Points Picker */}
+                <div className="flex items-center gap-2">
+                  <AwardIcon className="w-4 h-4 text-amber-400" />
+                  <label className="text-xs text-slate-300 font-semibold">Points:</label>
+                  <select
+                    value={activeQ.points !== undefined ? activeQ.points : 1000}
+                    onChange={(e) => handleUpdateActiveQuestion('points', Number(e.target.value))}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-amber-400 outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value={500}>500 pts</option>
+                    <option value={1000}>1,000 pts (Standard)</option>
+                    <option value={1500}>1,500 pts</option>
+                    <option value={2000}>2,000 pts (Double Points)</option>
+                    <option value={0}>0 pts (No Points)</option>
+                  </select>
+                </div>
+
+                {/* Time limit picker */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-400 font-semibold">Time limit:</label>
+                  <select
+                    value={activeQ.timeLimit || 20}
+                    onChange={(e) => handleUpdateActiveQuestion('timeLimit', Number(e.target.value))}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-white outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value={10}>10 seconds</option>
+                    <option value={20}>20 seconds</option>
+                    <option value={30}>30 seconds</option>
+                    <option value={60}>60 seconds</option>
+                  </select>
+                </div>
               </div>
             </div>
 
