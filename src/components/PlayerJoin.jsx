@@ -103,9 +103,18 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
 
     setIsLoading(true);
 
+    const withTimeout = (promise, ms = 6000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timed out. Please verify the Room PIN and network connection.')), ms)
+        )
+      ]);
+    };
+
     try {
       const roomRef = ref(db, `rooms/${trimmedCode}`);
-      const snapshot = await get(roomRef);
+      const snapshot = await withTimeout(get(roomRef));
 
       if (!snapshot.exists()) {
         setErrorMessage(`Room "${trimmedCode}" not found. Verify PIN with the host.`);
@@ -132,12 +141,12 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
       const newPlayerRef = push(playersListRef);
       const generatedPlayerId = newPlayerRef.key;
 
-      await set(newPlayerRef, {
+      await withTimeout(set(newPlayerRef, {
         id: generatedPlayerId,
         name: trimmedName,
         score: 0,
         joinedAt: Date.now()
-      });
+      }));
 
       setCurrentPlayerId(generatedPlayerId);
       setJoinedRoomCode(trimmedCode);

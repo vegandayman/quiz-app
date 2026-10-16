@@ -19,7 +19,7 @@ import { getDatabase } from 'firebase/database';
 const firebaseConfig = {
   apiKey: 'AIzaSyClTJ0hasmUyd1n4_loHpmiICcFt9P8hIg',
   authDomain: 'quiz-app-2d5e5.firebaseapp.com',
-  databaseURL: 'https://quiz-app-2d5e5-default-rtdb.firebaseio.com',
+  databaseURL: 'https://quiz-app-2d5e5-default-rtdb.europe-west1.firebasedatabase.app',
   projectId: 'quiz-app-2d5e5',
   storageBucket: 'quiz-app-2d5e5.firebasestorage.app',
   messagingSenderId: '539159285496',
