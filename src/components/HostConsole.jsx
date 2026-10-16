@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { db } from '../firebase.js';
+import QuizMaker from './QuizMaker.jsx';
 
 // Clean inline SVGs (zero external dependencies)
 const EyeIcon = ({ className = 'w-5 h-5' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
     <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EditIcon = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
   </svg>
 );
 
@@ -92,22 +100,25 @@ const defaultQuestions = [
 /**
  * HostConsole Component (Private Quiz Master Screen)
  * 
- * - Includes a button to reset / generate a new 4-digit room code
+ * - Includes Quiz Maker modal to create, edit, save, export, and import quizzes
+ * - Resets/generates room numbers
  * - Controls live game phases & reveals secret answers
  */
 export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   const [roomCode, setRoomCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
   const [roomData, setRoomData] = useState(null);
   const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [activeQuestions, setActiveQuestions] = useState(defaultQuestions);
+  const [isQuizMakerOpen, setIsQuizMakerOpen] = useState(false);
 
-  // Notify parent component of current room code
+  // Notify parent of room code
   useEffect(() => {
     if (roomCode && onRoomCodeReady) {
       onRoomCodeReady(roomCode);
     }
   }, [roomCode, onRoomCodeReady]);
 
-  // Initialize room in Firebase Realtime Database
+  // Initialize room in Firebase
   useEffect(() => {
     if (!roomCode) return;
 
@@ -117,7 +128,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
       roomCode,
       status: 'lobby',
       currentQuestionIndex: 0,
-      questions: defaultQuestions,
+      questions: activeQuestions,
       createdAt: Date.now()
     }).catch((err) => console.error('Error initializing room:', err));
 
@@ -128,16 +139,33 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
         if (data.currentQuestionIndex !== undefined) {
           setCurrentQIndex(data.currentQuestionIndex);
         }
+        if (data.questions && Array.isArray(data.questions)) {
+          setActiveQuestions(data.questions);
+        }
       }
     });
 
     return () => unsubscribe();
   }, [roomCode]);
 
-  // ACTION: Reset Room Number / Generate Fresh 4-Digit PIN
+  // Save custom quiz from QuizMaker
+  const handleSaveQuiz = async (newQuestions, title) => {
+    setActiveQuestions(newQuestions);
+    setCurrentQIndex(0);
+
+    if (roomCode) {
+      const roomRef = ref(db, `rooms/${roomCode}`);
+      await update(roomRef, {
+        questions: newQuestions,
+        currentQuestionIndex: 0,
+        status: 'lobby'
+      });
+    }
+  };
+
+  // Reset Room PIN
   const handleResetRoomNumber = async () => {
-    if (confirm('Are you sure you want to generate a new Room PIN? Current players will need to join the new room.')) {
-      // Mark old room as closed
+    if (confirm('Generate a new Room PIN? Current players will be notified to join the new room.')) {
       if (roomCode) {
         try {
           await update(ref(db, `rooms/${roomCode}`), { status: 'closed' });
@@ -163,7 +191,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
     answers: typeof p === 'object' ? p.answers || {} : {}
   }));
 
-  const activeQuestion = defaultQuestions[currentQIndex];
+  const activeQuestion = activeQuestions[currentQIndex];
   const status = roomData?.status || 'lobby';
 
   const choiceTally = [0, 0, 0, 0];
@@ -183,7 +211,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
       status: 'question',
       currentQuestionIndex: 0,
       questionStartTime: Date.now(),
-      timeLimit: defaultQuestions[0].timeLimit || 20
+      timeLimit: activeQuestions[0]?.timeLimit || 20
     });
   };
 
@@ -205,12 +233,12 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
     const nextIndex = currentQIndex + 1;
     const roomRef = ref(db, `rooms/${roomCode}`);
 
-    if (nextIndex < defaultQuestions.length) {
+    if (nextIndex < activeQuestions.length) {
       await update(roomRef, {
         status: 'question',
         currentQuestionIndex: nextIndex,
         questionStartTime: Date.now(),
-        timeLimit: defaultQuestions[nextIndex].timeLimit || 20
+        timeLimit: activeQuestions[nextIndex]?.timeLimit || 20
       });
     } else {
       await update(roomRef, {
@@ -246,13 +274,22 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
           </div>
         </div>
 
-        {/* Room Code Badge & Reset Button */}
-        <div className="flex items-center gap-2">
+        {/* Toolbar: Quiz Maker, PIN, Reset, Open Display */}
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Quiz Maker Button */}
+          <button
+            type="button"
+            onClick={() => setIsQuizMakerOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-purple-600/25 cursor-pointer transition-all"
+          >
+            <EditIcon className="w-3.5 h-3.5" />
+            <span>Quiz Maker</span>
+          </button>
+
           <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono">
             PIN: <span className="text-purple-400 font-bold">{roomCode}</span>
           </div>
 
-          {/* Reset Room PIN Button */}
           <button
             type="button"
             onClick={handleResetRoomNumber}
@@ -260,7 +297,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold cursor-pointer transition-all"
           >
             <RefreshCwIcon className="w-3.5 h-3.5 text-amber-400" />
-            <span>Reset Room PIN</span>
+            <span>New PIN</span>
           </button>
 
           <button
@@ -283,8 +320,9 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               {status}
             </span>
           </div>
-          <div className="text-slate-400">
-            Players in Room: <strong className="text-white">{players.length}</strong>
+          <div className="flex items-center gap-4 text-slate-400">
+            <span>Questions: <strong className="text-white">{activeQuestions.length}</strong></span>
+            <span>Players: <strong className="text-white">{players.length}</strong></span>
           </div>
         </div>
 
@@ -293,7 +331,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
           <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 border-2 border-purple-500/40 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold">
-                QUESTION {currentQIndex + 1} OF {defaultQuestions.length}
+                QUESTION {currentQIndex + 1} OF {activeQuestions.length}
               </span>
 
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
@@ -375,11 +413,11 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
 
           <button
             type="button"
-            onClick={handleResetRoomNumber}
-            className="px-4 py-2.5 rounded-xl border border-amber-900/60 bg-amber-950/30 hover:bg-amber-950/60 text-amber-300 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
+            onClick={() => setIsQuizMakerOpen(true)}
+            className="px-4 py-2.5 rounded-xl border border-purple-900/60 bg-purple-950/30 hover:bg-purple-950/60 text-purple-300 text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
           >
-            <RefreshCwIcon className="w-3.5 h-3.5" />
-            <span>New Room PIN</span>
+            <EditIcon className="w-3.5 h-3.5" />
+            <span>Edit Questions</span>
           </button>
         </div>
 
@@ -424,8 +462,8 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               className="px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-purple-600/30 cursor-pointer transition-all"
             >
               <span>
-                {currentQIndex + 1 < defaultQuestions.length
-                  ? `Next Question (${currentQIndex + 2}/${defaultQuestions.length})`
+                {currentQIndex + 1 < activeQuestions.length
+                  ? `Next Question (${currentQIndex + 2}/${activeQuestions.length})`
                   : 'Show Final Winner Podium'}
               </span>
               <ArrowRightIcon className="w-4 h-4" />
@@ -443,6 +481,15 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
           )}
         </div>
       </footer>
+
+      {/* QUIZ MAKER MODAL */}
+      {isQuizMakerOpen && (
+        <QuizMaker
+          initialQuestions={activeQuestions}
+          onSaveQuiz={handleSaveQuiz}
+          onClose={() => setIsQuizMakerOpen(false)}
+        />
+      )}
     </div>
   );
 }
