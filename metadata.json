@@ -1,0 +1,6 @@
+{
+  "name": "QuizPulse - Realtime Multiplayer Quiz",
+  "description": "Interactive multiplayer Kahoot-style quiz game powered by Firebase Realtime Database and React.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
