@@ -14,7 +14,7 @@ const UsersIcon = ({ className = 'w-5 h-5' }) => (
 
 const SparklesIcon = ({ className = 'w-5 h-5' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+    <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3Z" />
   </svg>
 );
 
@@ -56,6 +56,12 @@ const LoaderIcon = ({ className = 'w-4 h-4' }) => (
   </svg>
 );
 
+const CrownIcon = ({ className = 'w-6 h-6' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <polygon points="12 2 15 8 21 9 17 14 18 20 12 17 6 20 7 14 3 9 9 8 12 2" />
+  </svg>
+);
+
 const shapes = [
   { symbol: '▲', name: 'Triangle', bg: 'bg-red-600', border: 'border-red-500', glow: 'shadow-red-600/30' },
   { symbol: '◆', name: 'Diamond', bg: 'bg-blue-600', border: 'border-blue-500', glow: 'shadow-blue-600/30' },
@@ -67,7 +73,8 @@ const shapes = [
  * LiveDisplay Component (Shared Big Screen / TV / Projector)
  * 
  * - Full capability to join or switch to a new room at any time
- * - Shows Lobby (Big PIN), Questions, Timer, Revealed Answers, and Leaderboard
+ * - Shows Lobby (Big PIN), Questions, Timer, Revealed Answers with Vote Distribution, and Leaderboard
+ * - Celebratory Olympic Podium for the Finished game stage
  */
 export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
   const getInitialPin = () => {
@@ -289,9 +296,17 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
   const currentQIndex = roomData?.currentQuestionIndex || 0;
   const currentQuestion = roomData?.questions?.[currentQIndex] || null;
 
-  const totalAnswersSubmitted = players.filter(
-    (p) => p.answers && p.answers[currentQIndex] !== undefined
-  ).length;
+  // Answers tally per option
+  const choiceTally = [0, 0, 0, 0];
+  let totalAnswersSubmitted = 0;
+
+  players.forEach((p) => {
+    const ans = p.answers?.[currentQIndex];
+    if (ans !== undefined && ans.choiceIndex !== undefined) {
+      choiceTally[ans.choiceIndex] = (choiceTally[ans.choiceIndex] || 0) + 1;
+      totalAnswersSubmitted++;
+    }
+  });
 
   // ----------------------------------------------------
   // 1. LOBBY VIEW
@@ -392,8 +407,8 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
               </span>
             </div>
           ) : (
-            <div className="px-4 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-700 text-emerald-300 font-bold text-sm">
-              Answers Revealed
+            <div className="px-5 py-2 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/20">
+              ✓ Answers Revealed
             </div>
           )}
 
@@ -424,11 +439,12 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
             {currentQuestion?.options?.map((option, idx) => {
               const shape = shapes[idx % shapes.length];
               const isCorrectAnswer = isReveal && idx === currentQuestion.correctIndex;
+              const votes = choiceTally[idx] || 0;
 
               return (
                 <div
                   key={idx}
-                  className={`p-6 sm:p-8 rounded-2xl flex items-center gap-4 transition-all duration-300 border-2 ${shape.border} ${shape.bg} ${shape.glow} ${
+                  className={`p-6 sm:p-8 rounded-2xl flex items-center justify-between gap-4 transition-all duration-300 border-2 ${shape.border} ${shape.bg} ${shape.glow} ${
                     isReveal
                       ? isCorrectAnswer
                         ? 'scale-[1.03] ring-4 ring-emerald-400 shadow-2xl opacity-100'
@@ -436,16 +452,27 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
                       : 'opacity-100'
                   }`}
                 >
-                  <span className="w-10 h-10 rounded-xl bg-black/25 flex items-center justify-center text-xl font-black text-white shrink-0">
-                    {shape.symbol}
-                  </span>
-                  <span className="text-xl sm:text-2xl font-bold text-white flex-1 text-left">
-                    {option}
-                  </span>
-                  {isCorrectAnswer && (
-                    <span className="px-3 py-1 rounded-lg bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shrink-0">
-                      Correct ✓
+                  <div className="flex items-center gap-4 flex-1">
+                    <span className="w-10 h-10 rounded-xl bg-black/25 flex items-center justify-center text-xl font-black text-white shrink-0">
+                      {shape.symbol}
                     </span>
+                    <span className="text-xl sm:text-2xl font-bold text-white text-left">
+                      {option}
+                    </span>
+                  </div>
+
+                  {/* Reveal Badges & Vote Counts */}
+                  {isReveal && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-3 py-1 rounded-xl bg-black/30 backdrop-blur text-white text-xs font-mono font-bold">
+                        {votes} {votes === 1 ? 'vote' : 'votes'}
+                      </span>
+                      {isCorrectAnswer && (
+                        <span className="px-3 py-1 rounded-xl bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow">
+                          Correct ✓
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -463,7 +490,7 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
   // ----------------------------------------------------
   // 3. LEADERBOARD VIEW
   // ----------------------------------------------------
-  if (roomData.status === 'leaderboard' || roomData.status === 'finished') {
+  if (roomData.status === 'leaderboard') {
     const rankedPlayers = [...players].sort((a, b) => b.score - a.score);
 
     return (
@@ -472,10 +499,8 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
           <div className="flex items-center gap-3">
             <TrophyIcon className="w-8 h-8 text-amber-400" />
             <div>
-              <h1 className="text-2xl font-black text-white">
-                {roomData.status === 'finished' ? 'Final Scoreboard' : 'Current Leaderboard'}
-              </h1>
-              <p className="text-xs text-slate-400">Top Competitors</p>
+              <h1 className="text-2xl font-black text-white">Current Leaderboard</h1>
+              <p className="text-xs text-slate-400">Question {currentQIndex + 1} Standings</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -518,7 +543,114 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
         </main>
 
         <footer className="text-center text-slate-500 text-xs">
-          Waiting for host to continue...
+          Waiting for host to advance to the next round...
+        </footer>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
+  // 4. FINISHED / OLYMPIC PODIUM VIEW
+  // ----------------------------------------------------
+  if (roomData.status === 'finished') {
+    const rankedPlayers = [...players].sort((a, b) => b.score - a.score);
+    const first = rankedPlayers[0];
+    const second = rankedPlayers[1];
+    const third = rankedPlayers[2];
+    const runnersUp = rankedPlayers.slice(3, 8);
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between p-6 sm:p-10 font-sans relative overflow-hidden">
+        {/* Celebration Ambient Glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
+
+        <header className="flex items-center justify-between border-b border-slate-800 pb-4 relative z-10">
+          <div className="flex items-center gap-3">
+            <TrophyIcon className="w-8 h-8 text-amber-400" />
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500">
+                Final Winner Podium!
+              </h1>
+              <p className="text-xs text-slate-400">Quiz Completed</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSwitchRoom}
+            className="text-xs text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer"
+          >
+            Switch Room
+          </button>
+        </header>
+
+        {/* Podium Stage */}
+        <main className="my-auto max-w-4xl mx-auto w-full relative z-10 py-6">
+          <div className="flex items-end justify-center gap-4 sm:gap-6 mb-8">
+            
+            {/* 2nd Place (Silver - Left) */}
+            {second && (
+              <div className="flex flex-col items-center flex-1 max-w-[200px]">
+                <div className="mb-2 text-center">
+                  <span className="text-2xl sm:text-3xl">🥈</span>
+                  <p className="font-black text-slate-200 text-sm sm:text-base truncate max-w-[150px]">{second.name}</p>
+                  <p className="text-xs font-mono font-bold text-slate-400">{second.score} pts</p>
+                </div>
+                <div className="w-full h-36 sm:h-44 rounded-t-2xl bg-gradient-to-t from-slate-800 to-slate-700 border-t-2 border-slate-400 shadow-xl flex items-center justify-center">
+                  <span className="text-3xl sm:text-5xl font-black text-slate-400">2</span>
+                </div>
+              </div>
+            )}
+
+            {/* 1st Place (Gold - Center) */}
+            {first && (
+              <div className="flex flex-col items-center flex-1 max-w-[220px]">
+                <div className="mb-2 text-center">
+                  <CrownIcon className="w-8 h-8 text-amber-400 mx-auto animate-bounce" />
+                  <p className="font-black text-amber-300 text-base sm:text-xl truncate max-w-[180px]">{first.name}</p>
+                  <p className="text-xs sm:text-sm font-mono font-black text-amber-400">{first.score} pts</p>
+                </div>
+                <div className="w-full h-48 sm:h-60 rounded-t-2xl bg-gradient-to-t from-amber-700 via-amber-600 to-yellow-500 border-t-4 border-yellow-300 shadow-2xl shadow-amber-500/30 flex items-center justify-center">
+                  <span className="text-4xl sm:text-7xl font-black text-slate-950">1</span>
+                </div>
+              </div>
+            )}
+
+            {/* 3rd Place (Bronze - Right) */}
+            {third && (
+              <div className="flex flex-col items-center flex-1 max-w-[200px]">
+                <div className="mb-2 text-center">
+                  <span className="text-2xl sm:text-3xl">🥉</span>
+                  <p className="font-black text-amber-200 text-sm sm:text-base truncate max-w-[150px]">{third.name}</p>
+                  <p className="text-xs font-mono font-bold text-amber-300/80">{third.score} pts</p>
+                </div>
+                <div className="w-full h-28 sm:h-32 rounded-t-2xl bg-gradient-to-t from-amber-900 to-amber-800 border-t-2 border-amber-600 shadow-xl flex items-center justify-center">
+                  <span className="text-2xl sm:text-4xl font-black text-amber-600">3</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Runners-up List */}
+          {runnersUp.length > 0 && (
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 max-w-lg mx-auto">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block text-center mb-2">
+                Honorable Mentions
+              </span>
+              <div className="flex flex-wrap justify-center gap-3">
+                {runnersUp.map((p, idx) => (
+                  <div key={p.id} className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs flex items-center gap-2">
+                    <span className="text-slate-500 font-mono">#{idx + 4}</span>
+                    <span className="font-bold text-slate-200">{p.name}</span>
+                    <span className="text-purple-400 font-mono font-semibold">{p.score} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </main>
+
+        <footer className="text-center text-slate-500 text-xs relative z-10">
+          Quiz complete! Host can restart or start a new quiz anytime.
         </footer>
       </div>
     );

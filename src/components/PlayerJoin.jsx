@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ref, get, set, push, onValue, off, update } from 'firebase/database';
+import { ref, get, set, push, onValue, update } from 'firebase/database';
 import { db } from '../firebase.js';
 
-// Clean inline SVGs (no external dependencies)
+// Clean inline SVGs (zero external dependencies)
 const GamepadIcon = ({ className = 'w-6 h-6' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="6" x2="10" y1="12" y2="12" />
@@ -47,13 +47,33 @@ const SparklesIcon = ({ className = 'w-5 h-5' }) => (
   </svg>
 );
 
+const TrophyIcon = ({ className = 'w-6 h-6' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+);
+
 const answerButtons = [
-  { symbol: '▲', bg: 'bg-red-600 hover:bg-red-500 active:bg-red-700', border: 'border-red-500' },
-  { symbol: '◆', bg: 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700', border: 'border-blue-500' },
-  { symbol: '●', bg: 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600', border: 'border-amber-400' },
-  { symbol: '■', bg: 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700', border: 'border-emerald-500' }
+  { symbol: '▲', label: 'Triangle', bg: 'bg-red-600 hover:bg-red-500 active:bg-red-700', border: 'border-red-500' },
+  { symbol: '◆', label: 'Diamond', bg: 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700', border: 'border-blue-500' },
+  { symbol: '●', label: 'Circle', bg: 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600', border: 'border-amber-400' },
+  { symbol: '■', label: 'Square', bg: 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700', border: 'border-emerald-500' }
 ];
 
+/**
+ * PlayerJoin Component
+ * 
+ * - Handles entering 4-digit PIN and nickname
+ * - Live synchronized answering on player mobile screen
+ * - Real-time countdown timer bar
+ * - Speed bonus calculation
+ * - Dynamic feedback for Reveal, Leaderboard, and Final Winner Podium
+ */
 export default function PlayerJoin({ initialRoomCode = '' }) {
   const getInitialPin = () => {
     if (initialRoomCode) return initialRoomCode;
@@ -75,6 +95,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
   const [currentPlayerId, setCurrentPlayerId] = useState('');
   const [roomData, setRoomData] = useState(null);
   const [myAnswer, setMyAnswer] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(20);
 
   // Sync if prop changes externally
   useEffect(() => {
@@ -194,14 +215,36 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
     return () => unsubscribe();
   }, [isJoined, joinedRoomCode, currentPlayerId]);
 
-  // Handle Player Tapping an Answer Button
+  // Countdown timer effect on player phone
+  useEffect(() => {
+    if (roomData?.status !== 'question') return;
+
+    const duration = roomData?.timeLimit || 20;
+    const startTime = roomData?.questionStartTime || Date.now();
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, duration - elapsed);
+      setTimeLeft(remaining);
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [roomData?.status, roomData?.questionStartTime, roomData?.timeLimit]);
+
+  // Handle Player Tapping an Answer Button with speed-based Kahoot scoring
   const handleSelectAnswer = async (choiceIndex) => {
-    if (myAnswer !== null || !roomData) return;
+    if (myAnswer !== null || !roomData || timeLeft <= 0) return;
 
     const currentQIndex = roomData.currentQuestionIndex || 0;
     const currentQ = roomData.questions?.[currentQIndex];
     const isCorrect = choiceIndex === currentQ?.correctIndex;
-    const pointsAwarded = isCorrect ? 1000 : 0;
+
+    // Speed bonus: answering faster yields between 500 and 1000 points
+    const timeLimit = roomData.timeLimit || 20;
+    const startTime = roomData.questionStartTime || Date.now();
+    const timeElapsedSec = Math.max(0, (Date.now() - startTime) / 1000);
+    const speedRatio = Math.max(0, Math.min(1, 1 - (timeElapsedSec / timeLimit) / 2));
+    const pointsAwarded = isCorrect ? Math.round(1000 * speedRatio) : 0;
 
     setMyAnswer(choiceIndex);
 
@@ -213,6 +256,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
       [`answers/${currentQIndex}`]: {
         choiceIndex,
         isCorrect,
+        pointsAwarded,
         answeredAt: Date.now()
       }
     });
@@ -222,6 +266,19 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
   const currentQIndex = roomData?.currentQuestionIndex || 0;
   const currentQuestion = roomData?.questions?.[currentQIndex];
   const myPlayerObj = roomData?.players?.[currentPlayerId];
+  const lastAnswerObj = myPlayerObj?.answers?.[currentQIndex];
+
+  // Compute rankings
+  const rawPlayers = roomData?.players || {};
+  const sortedPlayers = Object.entries(rawPlayers)
+    .map(([id, p]) => ({
+      id,
+      name: typeof p === 'object' ? p.name : p,
+      score: typeof p === 'object' ? p.score || 0 : 0
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const myRank = sortedPlayers.findIndex((p) => p.id === currentPlayerId) + 1;
 
   // ----------------------------------------------------
   // VIEW: Joined Player Screen
@@ -291,31 +348,63 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
         {/* 2. QUESTION SCREEN */}
         {status === 'question' && (
           <main className="my-auto w-full max-w-md mx-auto flex flex-col items-center">
-            <p className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-3">
-              Question {currentQIndex + 1}
-            </p>
+            {/* Header: Question Number & Live Timer Bar */}
+            <div className="w-full flex items-center justify-between mb-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-purple-400">
+                Question {currentQIndex + 1}
+              </p>
+              <span className={`text-xs font-mono font-bold ${timeLeft <= 5 ? 'text-rose-400 animate-ping' : 'text-slate-400'}`}>
+                {timeLeft}s
+              </span>
+            </div>
+
+            {/* Timer Progress Bar */}
+            <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mb-4 border border-slate-800">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  timeLeft <= 5 ? 'bg-rose-500' : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                }`}
+                style={{ width: `${Math.max(0, Math.min(100, (timeLeft / (roomData?.timeLimit || 20)) * 100))}%` }}
+              />
+            </div>
 
             {myAnswer === null ? (
-              <div className="grid grid-cols-2 gap-3 w-full h-80 sm:h-96">
-                {answerButtons.map((btn, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSelectAnswer(idx)}
-                    className={`${btn.bg} ${btn.border} border-2 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl font-black text-white shadow-xl cursor-pointer transition-transform active:scale-95`}
-                  >
-                    <span>{btn.symbol}</span>
-                  </button>
-                ))}
-              </div>
+              timeLeft > 0 ? (
+                <div className="grid grid-cols-2 gap-3 w-full h-80 sm:h-96">
+                  {answerButtons.map((btn, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectAnswer(idx)}
+                      className={`${btn.bg} ${btn.border} border-2 rounded-2xl flex flex-col items-center justify-center gap-2 text-white shadow-xl cursor-pointer transition-transform active:scale-95`}
+                    >
+                      <span className="text-5xl font-black">{btn.symbol}</span>
+                      <span className="text-xs font-bold uppercase opacity-80">{btn.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 px-6 rounded-3xl bg-slate-900 border border-slate-800 text-center w-full shadow-2xl">
+                  <div className="w-16 h-16 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 mb-4">
+                    <XCircleIcon className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-black text-white">Time's Up!</h3>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Look up at the live display screen for the results...
+                  </p>
+                </div>
+              )
             ) : (
               <div className="py-12 px-6 rounded-3xl bg-slate-900 border border-slate-800 text-center w-full shadow-2xl">
                 <div className="w-16 h-16 mx-auto rounded-full bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mb-4">
                   <CheckCircleIcon className="w-8 h-8" />
                 </div>
                 <h3 className="text-xl font-black text-white">Answer Locked In!</h3>
-                <p className="text-xs text-slate-400 mt-2">
-                  Look up at the live display screen for results...
+                <p className="text-xs text-slate-300 mt-1">
+                  You selected <strong className="text-purple-300">{answerButtons[myAnswer]?.symbol} {answerButtons[myAnswer]?.label}</strong>
+                </p>
+                <p className="text-xs text-slate-500 mt-3">
+                  Look up at the big screen for results...
                 </p>
               </div>
             )}
@@ -326,29 +415,73 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
         {status === 'reveal' && (
           <main className="my-auto text-center flex flex-col items-center">
             {myAnswer === currentQuestion?.correctIndex ? (
-              <div className="p-8 rounded-3xl bg-emerald-950/60 border border-emerald-500/60 shadow-2xl max-w-sm w-full">
+              <div className="p-8 rounded-3xl bg-emerald-950/60 border border-emerald-500/60 shadow-2xl max-w-sm w-full animate-in zoom-in-95 duration-200">
                 <CheckCircleIcon className="w-16 h-16 text-emerald-400 mx-auto mb-3" />
                 <h2 className="text-2xl font-black text-white">Correct!</h2>
-                <p className="text-sm font-bold text-emerald-400 mt-1">+1000 Points</p>
+                <p className="text-lg font-black text-emerald-400 mt-1">
+                  +{lastAnswerObj?.pointsAwarded || 1000} Points
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Total Score: <span className="text-purple-300 font-mono font-bold">{myPlayerObj?.score || 0} pts</span>
+                </p>
               </div>
-            ) : (
-              <div className="p-8 rounded-3xl bg-rose-950/60 border border-rose-500/60 shadow-2xl max-w-sm w-full">
+            ) : myAnswer !== null ? (
+              <div className="p-8 rounded-3xl bg-rose-950/60 border border-rose-500/60 shadow-2xl max-w-sm w-full animate-in zoom-in-95 duration-200">
                 <XCircleIcon className="w-16 h-16 text-rose-400 mx-auto mb-3" />
                 <h2 className="text-2xl font-black text-white">Incorrect!</h2>
                 <p className="text-xs text-rose-300 mt-1">Keep going, next question is coming!</p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Total Score: <span className="text-purple-300 font-mono font-bold">{myPlayerObj?.score || 0} pts</span>
+                </p>
+              </div>
+            ) : (
+              <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl max-w-sm w-full">
+                <div className="w-14 h-14 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                  <XCircleIcon className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-black text-white">No Answer</h2>
+                <p className="text-xs text-slate-400 mt-1">You didn't submit an answer in time.</p>
               </div>
             )}
           </main>
         )}
 
-        {/* 4. LEADERBOARD / FINISHED */}
-        {(status === 'leaderboard' || status === 'finished') && (
+        {/* 4. LEADERBOARD SCREEN */}
+        {status === 'leaderboard' && (
           <main className="my-auto text-center flex flex-col items-center">
-            <h2 className="text-2xl font-black text-white mb-2">Scoreboard Phase</h2>
-            <p className="text-xs text-slate-400 mb-4">Look up at the live screen to view rankings!</p>
-            <div className="px-6 py-4 rounded-2xl bg-slate-900 border border-slate-800 text-center">
-              <span className="text-xs text-slate-500 uppercase font-bold">Your Total Score</span>
-              <p className="text-3xl font-black text-purple-400 mt-1">{myPlayerObj?.score || 0} pts</p>
+            <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 max-w-sm w-full shadow-2xl">
+              <TrophyIcon className="w-12 h-12 text-amber-400 mx-auto mb-3" />
+              <h2 className="text-xl font-black text-white mb-1">
+                You are in {myRank === 1 ? '🥇 1st' : myRank === 2 ? '🥈 2nd' : myRank === 3 ? '🥉 3rd' : `#${myRank}`} Place!
+              </h2>
+              <p className="text-xs text-slate-400 mb-5">
+                {myRank === 1 ? 'Outstanding! Holding the top spot!' : 'Look up at the live screen to view the full scoreboard!'}
+              </p>
+              <div className="px-6 py-4 rounded-2xl bg-slate-950 border border-slate-800 text-center">
+                <span className="text-xs text-slate-500 uppercase font-bold">Your Total Score</span>
+                <p className="text-3xl font-black text-purple-400 mt-1">{myPlayerObj?.score || 0} pts</p>
+              </div>
+            </div>
+          </main>
+        )}
+
+        {/* 5. FINISHED / FINAL WINNER PODIUM */}
+        {status === 'finished' && (
+          <main className="my-auto text-center flex flex-col items-center">
+            <div className="p-8 rounded-3xl bg-gradient-to-b from-purple-950/40 to-slate-900 border-2 border-purple-500/40 max-w-sm w-full shadow-2xl">
+              <span className="text-4xl block mb-2">
+                {myRank === 1 ? '👑' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '🎉'}
+              </span>
+              <h2 className="text-2xl font-black text-white mb-1">
+                {myRank === 1 ? 'CHAMPION!' : `Finished #${myRank}!`}
+              </h2>
+              <p className="text-xs text-slate-300 mb-6">
+                {myRank <= 3 ? 'You made it onto the final podium!' : 'Great game! Thanks for playing!'}
+              </p>
+              <div className="px-6 py-4 rounded-2xl bg-slate-950 border border-slate-800 text-center">
+                <span className="text-xs text-slate-500 uppercase font-bold">Final Score</span>
+                <p className="text-3xl font-black text-amber-400 mt-1">{myPlayerObj?.score || 0} pts</p>
+              </div>
             </div>
           </main>
         )}
