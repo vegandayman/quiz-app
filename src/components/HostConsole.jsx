@@ -104,6 +104,7 @@ const shapes = [
 const defaultQuestions = [
   {
     id: 1,
+    type: 'question',
     question: 'Which planet in our solar system has the most moons?',
     options: ['Jupiter', 'Saturn', 'Neptune', 'Mars'],
     correctIndex: 1,
@@ -113,6 +114,7 @@ const defaultQuestions = [
   },
   {
     id: 2,
+    type: 'question',
     question: 'What was the first video game ever played in outer space?',
     options: ['Tetris', 'Pac-Man', 'Pong', 'Space Invaders'],
     correctIndex: 0,
@@ -121,7 +123,15 @@ const defaultQuestions = [
     timeLimit: 20
   },
   {
+    id: 'splash-1',
+    type: 'splash',
+    title: 'Now the Music Round!',
+    subtitle: 'Get your listening ears ready — test your knowledge of iconic hits and artists.',
+    imageUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=800&q=80'
+  },
+  {
     id: 3,
+    type: 'question',
     question: 'How many hearts does an octopus have?',
     options: ['One', 'Two', 'Three', 'Four'],
     correctIndex: 2,
@@ -131,6 +141,7 @@ const defaultQuestions = [
   },
   {
     id: 4,
+    type: 'question',
     question: 'Which programming language was created in only 10 days in May 1995?',
     options: ['Python', 'JavaScript', 'Java', 'PHP'],
     correctIndex: 1,
@@ -288,7 +299,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   // GAME LIFECYCLE CONTROLLERS
   // ----------------------------------------------------
 
-  // 1. START QUIZ (Lobby -> Question 1)
+  // 1. START QUIZ (Lobby -> Question 1 or Splash 1)
   const handleStartQuiz = async () => {
     const roomRef = ref(db, `rooms/${roomCode}`);
 
@@ -300,12 +311,15 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
       });
     }
 
+    const firstItem = activeQuestions[0];
+    const isSplash = firstItem?.type === 'splash';
+
     await update(roomRef, {
       ...resetPlayersUpdates,
-      status: 'question',
+      status: isSplash ? 'splash' : 'question',
       currentQuestionIndex: 0,
       questionStartTime: Date.now(),
-      timeLimit: activeQuestions[0]?.timeLimit || 20
+      timeLimit: firstItem?.timeLimit || 20
     });
   };
 
@@ -325,17 +339,20 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
     });
   };
 
-  // 4. NEXT QUESTION (Leaderboard -> Question X OR Finished)
+  // 4. NEXT SLIDE (Leaderboard / Splash -> Next Question / Splash OR Finished)
   const handleNextQuestion = async () => {
     const nextIndex = currentQIndex + 1;
     const roomRef = ref(db, `rooms/${roomCode}`);
 
     if (nextIndex < activeQuestions.length) {
+      const nextItem = activeQuestions[nextIndex];
+      const isSplash = nextItem?.type === 'splash';
+
       await update(roomRef, {
-        status: 'question',
+        status: isSplash ? 'splash' : 'question',
         currentQuestionIndex: nextIndex,
         questionStartTime: Date.now(),
-        timeLimit: activeQuestions[nextIndex]?.timeLimit || 20
+        timeLimit: nextItem?.timeLimit || 20
       });
     } else {
       await update(roomRef, {
@@ -441,6 +458,10 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                 1. Lobby
               </span>
               <span className="text-slate-600">→</span>
+              <span className={`px-2.5 py-1 rounded-lg ${status === 'splash' ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-500'}`}>
+                Splash
+              </span>
+              <span className="text-slate-600">→</span>
               <span className={`px-2.5 py-1 rounded-lg ${status === 'question' ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
                 2. Question
               </span>
@@ -463,6 +484,22 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                   <h2 className="text-2xl font-black text-white">Lobby is Open</h2>
                   <p className="text-xs text-slate-400 mt-1">
                     {players.length} {players.length === 1 ? 'player has' : 'players have'} joined Room PIN <strong className="text-purple-400 font-mono text-sm">{roomCode}</strong>. Ready when you are!
+                  </p>
+                </>
+              )}
+
+              {status === 'splash' && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="px-2.5 py-1 rounded-md bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider">
+                      Splash Announcement
+                    </span>
+                    <h2 className="text-2xl font-black text-amber-200">
+                      {activeQuestion.title || 'Round Announcement'}
+                    </h2>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-2">
+                    {activeQuestion.subtitle || 'Active on the live big screen display and player devices.'} Take your time to introduce the round!
                   </p>
                 </>
               )}
@@ -533,7 +570,28 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                   className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-base flex items-center justify-center gap-3 shadow-xl shadow-purple-600/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
                 >
                   <PlayIcon className="w-5 h-5 fill-current" />
-                  <span>Start Quiz (Question 1)</span>
+                  <span>
+                    {activeQuestions[0]?.type === 'splash'
+                      ? `Start Quiz (Splash: "${activeQuestions[0]?.title || 'Announcement'}")`
+                      : 'Start Quiz (Question 1)'}
+                  </span>
+                </button>
+              )}
+
+              {status === 'splash' && (
+                <button
+                  type="button"
+                  onClick={handleNextQuestion}
+                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-base flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                >
+                  <span>
+                    {currentQIndex + 1 < activeQuestions.length
+                      ? activeQuestions[currentQIndex + 1]?.type === 'splash'
+                        ? `Continue to: "${activeQuestions[currentQIndex + 1]?.title || 'Next Splash'}"`
+                        : `Start Next Question (${currentQIndex + 2} of ${activeQuestions.length})`
+                      : 'Show Final Winner Podium'}
+                  </span>
+                  <ArrowRightIcon className="w-5 h-5 text-slate-950" />
                 </button>
               )}
 
@@ -571,7 +629,9 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                 >
                   <span>
                     {currentQIndex + 1 < activeQuestions.length
-                      ? `Start Question ${currentQIndex + 2} of ${activeQuestions.length}`
+                      ? activeQuestions[currentQIndex + 1]?.type === 'splash'
+                        ? `Continue to: "${activeQuestions[currentQIndex + 1]?.title || 'Splash Screen'}"`
+                        : `Start Question ${currentQIndex + 2} of ${activeQuestions.length}`
                       : 'Show Final Winner Podium'}
                   </span>
                   <ArrowRightIcon className="w-5 h-5" />
@@ -631,27 +691,82 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
             {nextQuestion && status === 'leaderboard' && (
               <div className="mt-4 p-4 rounded-2xl bg-purple-950/30 border border-purple-800/50">
                 <span className="text-[10px] font-black uppercase text-purple-300 tracking-wider">
-                  Upcoming: Question {currentQIndex + 2} Preview
+                  Upcoming: Slide #{currentQIndex + 2} Preview
                 </span>
-                <p className="font-bold text-white text-sm mt-1">{nextQuestion.question}</p>
-                <div className="flex items-center gap-3 mt-1 text-xs">
-                  <span className="text-emerald-400 font-semibold">
-                    Correct Answer: {nextQuestion.options[nextQuestion.correctIndex]}
-                  </span>
-                  <span className="text-amber-400 font-mono">
-                    ({nextQuestion.points ?? 1000} pts)
-                  </span>
-                </div>
+                {nextQuestion.type === 'splash' ? (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[10px] font-black uppercase">
+                      Splash Screen
+                    </span>
+                    <span className="font-bold text-white text-sm">{nextQuestion.title || 'Announcement'}</span>
+                    {nextQuestion.subtitle && (
+                      <span className="text-xs text-slate-400">({nextQuestion.subtitle})</span>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <p className="font-bold text-white text-sm mt-1">{nextQuestion.question}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs">
+                      <span className="text-emerald-400 font-semibold">
+                        Correct Answer: {nextQuestion.options?.[nextQuestion.correctIndex]}
+                      </span>
+                      <span className="text-amber-400 font-mono">
+                        ({nextQuestion.points !== undefined && nextQuestion.points !== '' ? nextQuestion.points : 1} {Number(nextQuestion.points ?? 1) === 1 ? 'pt' : 'pts'})
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
         )}
 
         {/* ======================================================== */}
-        {/* CONFIDENTIAL ANSWER KEY & REAL-TIME PLAYER SELECTIONS */}
+        {/* CONFIDENTIAL ANSWER KEY & REAL-TIME PLAYER SELECTIONS OR SPLASH PREVIEW */}
         {/* ======================================================== */}
         {activeQuestion && status !== 'finished' && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
+          activeQuestion.type === 'splash' ? (
+            <div className="bg-slate-900/90 border border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs font-bold">
+                    SLIDE {currentQIndex + 1} OF {activeQuestions.length} • SPLASH SCREEN
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
+                  <EyeIcon className="w-4 h-4 text-amber-400" />
+                  <span>ACTIVE ON LIVE BIG SCREEN & PLAYERS</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                {activeQuestion.imageUrl && (
+                  <div className="w-full md:w-64 h-44 rounded-2xl overflow-hidden border border-purple-500/30 shadow-lg shrink-0 bg-slate-950">
+                    <img
+                      src={activeQuestion.imageUrl}
+                      alt="Splash banner"
+                      className="w-full h-full object-cover object-center"
+                    />
+                  </div>
+                )}
+                <div className="flex-1 space-y-2 text-center md:text-left">
+                  <span className="text-xs uppercase tracking-widest text-amber-400 font-bold">Round Title</span>
+                  <h2 className="text-2xl sm:text-3xl font-black text-white">
+                    {activeQuestion.title || 'Now the Music Round!'}
+                  </h2>
+                  {activeQuestion.subtitle && (
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {activeQuestion.subtitle}
+                    </p>
+                  )}
+                  <div className="pt-2 text-xs text-purple-300 flex items-center justify-center md:justify-start gap-1.5 font-medium">
+                    <span>💡 Host guidance: Players have no choices to submit during splash screens. Use this time to introduce the round, announce rules, or play audio. Click the button above when ready to launch questions.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 font-mono text-xs font-bold">
@@ -804,6 +919,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               </div>
             )}
           </div>
+          )
         )}
 
         {/* ======================================================== */}

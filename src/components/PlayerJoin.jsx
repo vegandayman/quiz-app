@@ -350,6 +350,46 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
           </main>
         )}
 
+        {/* 1.5. SPLASH / INTERMISSION SCREEN */}
+        {status === 'splash' && (
+          <main className="my-auto text-center flex flex-col items-center max-w-sm w-full mx-auto animate-in zoom-in-95 duration-200">
+            <div className="w-full p-6 sm:p-8 rounded-3xl bg-slate-900 border border-amber-500/40 shadow-2xl space-y-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                Round Announcement
+              </span>
+
+              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                {currentQuestion?.title || 'Now the Music Round!'}
+              </h2>
+
+              {currentQuestion?.subtitle && (
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  {currentQuestion.subtitle}
+                </p>
+              )}
+
+              {currentQuestion?.imageUrl && (
+                <div className="rounded-2xl overflow-hidden border border-purple-500/30 max-h-48 w-full bg-slate-950 shadow-lg">
+                  <img
+                    src={currentQuestion.imageUrl}
+                    alt="Splash preview"
+                    className="w-full h-full object-cover object-center"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 text-xs text-purple-300 font-semibold flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                <span>Look up at the live display! Questions start soon...</span>
+              </div>
+            </div>
+          </main>
+        )}
+
         {/* 2. QUESTION SCREEN */}
         {status === 'question' && (
           <main className="my-auto w-full max-w-md mx-auto flex flex-col items-center">
@@ -360,7 +400,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
                   Question {currentQIndex + 1}
                 </p>
                 <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[10px] font-mono text-amber-300 font-bold">
-                  {currentQuestion?.points !== undefined ? currentQuestion.points : 1000} pts
+                  {currentQuestion?.points !== undefined && currentQuestion.points !== '' ? currentQuestion.points : 1} {Number(currentQuestion?.points ?? 1) === 1 ? 'pt' : 'pts'}
                 </span>
               </div>
               <span className={`text-xs font-mono font-bold ${timeLeft <= 5 ? 'text-rose-400 animate-ping' : 'text-slate-400'}`}>

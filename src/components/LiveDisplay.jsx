@@ -386,7 +386,86 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
   }
 
   // ----------------------------------------------------
-  // 2. QUESTION & REVEAL VIEW
+  // 2. SPLASH SCREEN VIEW (Intermission / Round Announcement)
+  // ----------------------------------------------------
+  if (roomData.status === 'splash') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-between p-6 sm:p-12 font-sans relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header */}
+        <header className="flex items-center justify-between border-b border-slate-800 pb-4 relative z-10">
+          <div className="flex items-center gap-3">
+            <span className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              Round Announcement
+            </span>
+            <span className="text-xs text-slate-400 font-medium">
+              Slide {currentQIndex + 1} of {roomData.questions?.length || 1}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold">
+              <UsersIcon className="w-4 h-4 text-purple-400" />
+              <span>{players.length} Players Connected</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSwitchRoom}
+              className="text-xs text-slate-400 hover:text-white transition-colors px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 cursor-pointer"
+            >
+              Switch Room
+            </button>
+          </div>
+        </header>
+
+        {/* Main Splash Centerstage */}
+        <main className="my-auto w-full max-w-4xl mx-auto flex flex-col items-center text-center relative z-10 py-6">
+          <div className="inline-block mb-4">
+            <span className="px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-pink-500/20 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold uppercase tracking-widest shadow-lg">
+              Next Up
+            </span>
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-amber-200 to-purple-200 drop-shadow-[0_10px_35px_rgba(245,158,11,0.25)] mb-4 leading-tight">
+            {currentQuestion?.title || 'Now the Music Round!'}
+          </h1>
+
+          {currentQuestion?.subtitle && (
+            <p className="text-lg sm:text-2xl text-slate-300 font-medium max-w-2xl mx-auto mb-8 leading-relaxed">
+              {currentQuestion.subtitle}
+            </p>
+          )}
+
+          {currentQuestion?.imageUrl && (
+            <div className="relative max-w-xl w-full mx-auto rounded-3xl overflow-hidden border-2 border-purple-500/40 shadow-2xl shadow-purple-900/50 bg-slate-900/80 my-2">
+              <img
+                src={currentQuestion.imageUrl}
+                alt={currentQuestion.title || 'Splash banner'}
+                className="w-full max-h-[380px] sm:max-h-[440px] object-cover object-center"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+        </main>
+
+        {/* Bottom Banner */}
+        <footer className="text-center text-slate-400 text-xs relative z-10 flex items-center justify-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          <span>Quiz Master will begin the round shortly...</span>
+        </footer>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
+  // 3. QUESTION & REVEAL VIEW
   // ----------------------------------------------------
   if (roomData.status === 'question' || roomData.status === 'reveal') {
     const isReveal = roomData.status === 'reveal';
