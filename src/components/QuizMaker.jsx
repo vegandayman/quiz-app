@@ -77,6 +77,17 @@ const SparklesIcon = ({ className = 'w-4 h-4' }) => (
   </svg>
 );
 
+const TrophyIcon = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+);
+
 const shapes = [
   { symbol: '▲', label: 'Red Triangle', bg: 'bg-red-600', ring: 'ring-red-500' },
   { symbol: '◆', label: 'Blue Diamond', bg: 'bg-blue-600', ring: 'ring-blue-500' },
@@ -135,8 +146,9 @@ const splashPresets = [
  * - Imports previously saved JSON files
  * - Saves directly to the live Firebase room
  */
-export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }) {
+export default function QuizMaker({ initialQuestions = [], initialShowScoreboardAfterQuestion = true, onSaveQuiz, onClose }) {
   const [quizTitle, setQuizTitle] = useState('My Custom Quiz');
+  const [showScoreboardAfterQuestion, setShowScoreboardAfterQuestion] = useState(() => initialShowScoreboardAfterQuestion);
   const [questions, setQuestions] = useState(() => {
     if (initialQuestions && initialQuestions.length > 0) {
       return JSON.parse(JSON.stringify(initialQuestions)).map((q) => {
@@ -152,7 +164,8 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         return {
           ...q,
           type: 'question',
-          points: q.points !== undefined && q.points !== '' ? Number(q.points) : 1
+          points: q.points !== undefined && q.points !== '' ? Number(q.points) : 1,
+          showScoreboardAfterQuestion: q.showScoreboardAfterQuestion !== undefined ? Boolean(q.showScoreboardAfterQuestion) : initialShowScoreboardAfterQuestion
         };
       });
     }
@@ -165,7 +178,8 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         correctIndex: 1,
         points: 1,
         secretNote: 'Saturn has 146 confirmed moons.',
-        timeLimit: 20
+        timeLimit: 20,
+        showScoreboardAfterQuestion: true
       },
       {
         id: 2,
@@ -182,7 +196,8 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         correctIndex: 1,
         points: 1,
         secretNote: 'The Buggles released the single in 1979.',
-        timeLimit: 20
+        timeLimit: 20,
+        showScoreboardAfterQuestion: true
       }
     ];
   });
@@ -200,6 +215,38 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     setTimeout(() => setNotification(''), 3000);
   };
 
+  // Toggle global scoreboard after question setting
+  const handleToggleGlobalScoreboard = () => {
+    const nextVal = !showScoreboardAfterQuestion;
+    setShowScoreboardAfterQuestion(nextVal);
+    // Also synchronize questions so all existing questions update
+    const updated = questions.map((q) => {
+      if (q.type === 'splash') return q;
+      return {
+        ...q,
+        showScoreboardAfterQuestion: nextVal
+      };
+    });
+    setQuestions(updated);
+    showNotification(
+      nextVal
+        ? 'Scoreboard enabled: Leaderboard will show after questions'
+        : 'Scoreboard disabled: Ending questions will go directly to the next question'
+    );
+  };
+
+  // Toggle scoreboard for active question
+  const handleToggleQuestionScoreboard = () => {
+    const currentVal = activeQ.showScoreboardAfterQuestion !== false;
+    const nextVal = !currentVal;
+    handleUpdateActiveQuestion('showScoreboardAfterQuestion', nextVal);
+    showNotification(
+      nextVal
+        ? `Scoreboard enabled after Question #${activeIdx + 1}`
+        : `Scoreboard disabled after Question #${activeIdx + 1} (direct to next question)`
+    );
+  };
+
   // Add new question slide
   const handleAddQuestion = () => {
     const newQuestion = {
@@ -210,7 +257,8 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
       correctIndex: 0,
       points: 1,
       secretNote: '',
-      timeLimit: 20
+      timeLimit: 20,
+      showScoreboardAfterQuestion: showScoreboardAfterQuestion
     };
     const updated = [...questions, newQuestion];
     setQuestions(updated);
@@ -314,11 +362,12 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     showNotification(`Applied preset "${preset.name}"!`);
   };
 
-  // Export Quiz as JSON (including splash screens & points)
+  // Export Quiz as JSON (including splash screens, points & scoreboard toggle)
   const handleExportJSON = () => {
     const exportData = {
       title: quizTitle,
-      version: '1.2',
+      showScoreboardAfterQuestion: showScoreboardAfterQuestion,
+      version: '1.3',
       exportedAt: new Date().toISOString(),
       questions: questions
     };
@@ -336,7 +385,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     showNotification(`Exported as "${filename}"!`);
   };
 
-  // Import Quiz from JSON (with splash screens & points compatibility)
+  // Import Quiz from JSON (with splash screens, points & scoreboard toggle compatibility)
   const handleImportJSON = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -352,10 +401,17 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         } else if (parsed && Array.isArray(parsed.questions)) {
           loadedQuestions = parsed.questions;
           if (parsed.title) setQuizTitle(parsed.title);
+          if (parsed.showScoreboardAfterQuestion !== undefined) {
+            setShowScoreboardAfterQuestion(Boolean(parsed.showScoreboardAfterQuestion));
+          }
         } else {
           alert('Invalid quiz JSON format: expected an array of questions or an object with a "questions" array.');
           return;
         }
+
+        const defaultScoreboardVal = parsed.showScoreboardAfterQuestion !== undefined
+          ? Boolean(parsed.showScoreboardAfterQuestion)
+          : showScoreboardAfterQuestion;
 
         const validated = loadedQuestions.map((q, idx) => {
           if (q.type === 'splash') {
@@ -376,7 +432,10 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
             correctIndex: typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < 4 ? q.correctIndex : 0,
             points: typeof q.points === 'number' && !isNaN(q.points) ? Math.max(0, Math.min(100000, q.points)) : 1,
             secretNote: q.secretNote || '',
-            timeLimit: q.timeLimit || 20
+            timeLimit: q.timeLimit || 20,
+            showScoreboardAfterQuestion: q.showScoreboardAfterQuestion !== undefined
+              ? Boolean(q.showScoreboardAfterQuestion)
+              : defaultScoreboardVal
           };
         });
 
@@ -395,9 +454,9 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
   // Save to live game
   const handleSaveToGame = () => {
     if (onSaveQuiz) {
-      onSaveQuiz(questions, quizTitle);
+      onSaveQuiz(questions, quizTitle, showScoreboardAfterQuestion);
     }
-    showNotification('Quiz and splash screens applied to live room!');
+    showNotification('Quiz and settings applied to live room!');
     if (onClose) {
       onClose();
     }
@@ -428,6 +487,43 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
                 {splashCount} {splashCount === 1 ? 'Splash Screen' : 'Splash Screens'}
               </span>
             )}
+          </div>
+
+          {/* Show scoreboard after question toggle (Global Quiz Setting) */}
+          <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 shadow-inner">
+            <TrophyIcon className={`w-3.5 h-3.5 ${showScoreboardAfterQuestion ? 'text-amber-400' : 'text-slate-500'}`} />
+            <button
+              type="button"
+              onClick={handleToggleGlobalScoreboard}
+              className="text-xs text-slate-300 font-semibold cursor-pointer select-none hidden md:inline hover:text-white"
+            >
+              Show scoreboard after question:
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleGlobalScoreboard}
+              className="text-xs text-slate-300 font-semibold cursor-pointer select-none md:hidden hover:text-white"
+            >
+              Scoreboard:
+            </button>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showScoreboardAfterQuestion}
+              onClick={handleToggleGlobalScoreboard}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                showScoreboardAfterQuestion ? 'bg-amber-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  showScoreboardAfterQuestion ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className={`text-[11px] font-bold ${showScoreboardAfterQuestion ? 'text-amber-300' : 'text-slate-400'}`}>
+              {showScoreboardAfterQuestion ? 'ON' : 'OFF'}
+            </span>
           </div>
         </div>
 
@@ -557,9 +653,19 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
 
                     <div className="flex items-center gap-1 shrink-0">
                       {!isSplash && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 text-amber-300">
-                          {item.points !== undefined && item.points !== '' ? item.points : 1} {Number(item.points ?? 1) === 1 ? 'pt' : 'pts'}
-                        </span>
+                        <>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/60 text-amber-300">
+                            {item.points !== undefined && item.points !== '' ? item.points : 1} {Number(item.points ?? 1) === 1 ? 'pt' : 'pts'}
+                          </span>
+                          {item.showScoreboardAfterQuestion === false && (
+                            <span
+                              title="Scoreboard off: Ending goes directly to next question"
+                              className="text-[9px] px-1 py-0.5 rounded bg-slate-900/90 border border-purple-800 text-purple-300 font-bold"
+                            >
+                              direct
+                            </span>
+                          )}
+                        </>
                       )}
 
                       {/* Reorder Up/Down buttons */}
@@ -891,6 +997,36 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
                         <option value={30}>30 seconds</option>
                         <option value={60}>60 seconds</option>
                       </select>
+                    </div>
+
+                    {/* Show scoreboard after question toggle */}
+                    <div className="flex items-center gap-2 pl-3 border-l border-slate-800">
+                      <TrophyIcon className={`w-3.5 h-3.5 ${activeQ.showScoreboardAfterQuestion !== false ? 'text-amber-400' : 'text-slate-500'}`} />
+                      <button
+                        type="button"
+                        onClick={handleToggleQuestionScoreboard}
+                        className="text-xs text-slate-300 font-semibold cursor-pointer select-none hover:text-white"
+                      >
+                        Show scoreboard after question:
+                      </button>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={activeQ.showScoreboardAfterQuestion !== false}
+                        onClick={handleToggleQuestionScoreboard}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          activeQ.showScoreboardAfterQuestion !== false ? 'bg-amber-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            activeQ.showScoreboardAfterQuestion !== false ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-[11px] font-bold ${activeQ.showScoreboardAfterQuestion !== false ? 'text-amber-300' : 'text-slate-400'}`}>
+                        {activeQ.showScoreboardAfterQuestion !== false ? 'ON' : 'OFF'}
+                      </span>
                     </div>
                   </div>
                 </div>

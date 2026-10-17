@@ -166,6 +166,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   const [roomData, setRoomData] = useState(null);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [activeQuestions, setActiveQuestions] = useState(defaultQuestions);
+  const [showScoreboardAfterQuestion, setShowScoreboardAfterQuestion] = useState(true);
   const [isQuizMakerOpen, setIsQuizMakerOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
 
@@ -187,6 +188,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
       status: 'lobby',
       currentQuestionIndex: 0,
       questions: activeQuestions,
+      showScoreboardAfterQuestion: true,
       createdAt: Date.now()
     }).catch((err) => console.error('Error initializing room:', err));
 
@@ -199,6 +201,9 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
         }
         if (data.questions && Array.isArray(data.questions)) {
           setActiveQuestions(data.questions);
+        }
+        if (data.showScoreboardAfterQuestion !== undefined) {
+          setShowScoreboardAfterQuestion(Boolean(data.showScoreboardAfterQuestion));
         }
       }
     });
@@ -223,16 +228,31 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   }, [roomData?.status, roomData?.questionStartTime, roomData?.timeLimit]);
 
   // Save custom quiz from QuizMaker
-  const handleSaveQuiz = async (newQuestions, title) => {
+  const handleSaveQuiz = async (newQuestions, title, showScoreboard) => {
+    const scoreboardSetting = showScoreboard !== undefined ? showScoreboard : showScoreboardAfterQuestion;
     setActiveQuestions(newQuestions);
+    setShowScoreboardAfterQuestion(scoreboardSetting);
     setCurrentQIndex(0);
 
     if (roomCode) {
       const roomRef = ref(db, `rooms/${roomCode}`);
       await update(roomRef, {
         questions: newQuestions,
+        showScoreboardAfterQuestion: scoreboardSetting,
         currentQuestionIndex: 0,
         status: 'lobby'
+      });
+    }
+  };
+
+  // Toggle scoreboard setting on the fly
+  const handleToggleScoreboardSetting = async () => {
+    const nextVal = !showScoreboardAfterQuestion;
+    setShowScoreboardAfterQuestion(nextVal);
+    if (roomCode) {
+      const roomRef = ref(db, `rooms/${roomCode}`);
+      await update(roomRef, {
+        showScoreboardAfterQuestion: nextVal
       });
     }
   };
@@ -272,6 +292,14 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
   const activeQuestion = activeQuestions[currentQIndex] || activeQuestions[0];
   const nextQuestion = activeQuestions[currentQIndex + 1] || null;
   const status = roomData?.status || 'lobby';
+  const isSplashCurrent = activeQuestion?.type === 'splash';
+  const shouldShowScoreboard = !isSplashCurrent && (
+    activeQuestion?.showScoreboardAfterQuestion !== undefined
+      ? Boolean(activeQuestion.showScoreboardAfterQuestion)
+      : (roomData?.showScoreboardAfterQuestion !== undefined
+          ? Boolean(roomData.showScoreboardAfterQuestion)
+          : showScoreboardAfterQuestion)
+  );
 
   // Count choices and group players by choice for the current question
   const choiceTally = [0, 0, 0, 0];
@@ -409,6 +437,20 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
             <span>Quiz Maker</span>
           </button>
 
+          <button
+            type="button"
+            onClick={handleToggleScoreboardSetting}
+            title={showScoreboardAfterQuestion ? 'Scoreboard enabled after questions. Click to toggle OFF.' : 'Scoreboard disabled (ending questions goes directly to next question). Click to toggle ON.'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+              showScoreboardAfterQuestion
+                ? 'bg-amber-950/40 border-amber-500/40 text-amber-300 hover:bg-amber-900/40'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+            }`}
+          >
+            <TrophyIcon className={`w-3.5 h-3.5 ${showScoreboardAfterQuestion ? 'text-amber-400' : 'text-slate-500'}`} />
+            <span>Scoreboard: <strong className={showScoreboardAfterQuestion ? 'text-amber-300' : 'text-slate-400'}>{showScoreboardAfterQuestion ? 'ON' : 'OFF'}</strong></span>
+          </button>
+
           <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono">
             PIN: <span className="text-purple-400 font-bold">{roomCode}</span>
           </div>
@@ -469,10 +511,21 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               <span className={`px-2.5 py-1 rounded-lg ${status === 'reveal' ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
                 3. Reveal
               </span>
-              <span className="text-slate-600">→</span>
-              <span className={`px-2.5 py-1 rounded-lg ${status === 'leaderboard' ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
-                4. Leaderboard
-              </span>
+              {shouldShowScoreboard ? (
+                <>
+                  <span className="text-slate-600">→</span>
+                  <span className={`px-2.5 py-1 rounded-lg ${status === 'leaderboard' ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
+                    4. Leaderboard
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-slate-600">→</span>
+                  <span className={`px-2.5 py-1 rounded-lg ${status === 'question' || status === 'splash' || status === 'finished' ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-500'}`}>
+                    4. Direct Next
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
@@ -535,9 +588,18 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
 
               {status === 'reveal' && (
                 <>
-                  <h2 className="text-2xl font-black text-emerald-400">Answer Revealed!</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-black text-emerald-400">Answer Revealed!</h2>
+                    {!shouldShowScoreboard && (
+                      <span className="px-2 py-0.5 rounded-md bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
+                        Scoreboard Off • Direct to Next
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-300 mt-1">
-                    Correct answer & vote stats are on the big screen. Discuss host notes below, then present the scoreboard!
+                    {shouldShowScoreboard
+                      ? 'Correct answer & vote stats are on the big screen. Discuss host notes below, then present the scoreboard!'
+                      : 'Correct answer & vote stats are on the big screen. Ending the question goes directly to the next slide!'}
                   </p>
                 </>
               )}
@@ -596,29 +658,71 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
               )}
 
               {status === 'question' && (
-                <button
-                  type="button"
-                  onClick={handleRevealAnswer}
-                  className={`w-full sm:w-auto px-8 py-4 rounded-2xl text-white font-black text-base flex items-center justify-center gap-3 shadow-xl transition-all cursor-pointer ${
-                    allPlayersAnswered || timeLeft === 0
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 shadow-emerald-500/40 ring-4 ring-emerald-500/40 animate-pulse'
-                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/30'
-                  }`}
-                >
-                  <EyeIcon className="w-5 h-5" />
-                  <span>Reveal Answer on Big Screen</span>
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRevealAnswer}
+                    className={`w-full sm:w-auto px-8 py-4 rounded-2xl text-white font-black text-base flex items-center justify-center gap-3 shadow-xl transition-all cursor-pointer ${
+                      allPlayersAnswered || timeLeft === 0
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 shadow-emerald-500/40 ring-4 ring-emerald-500/40 animate-pulse'
+                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/30'
+                    }`}
+                  >
+                    <EyeIcon className="w-5 h-5" />
+                    <span>Reveal Answer on Big Screen</span>
+                  </button>
+
+                  {!shouldShowScoreboard && (
+                    <button
+                      type="button"
+                      onClick={handleNextQuestion}
+                      title="Directly end this question and advance to the next slide"
+                      className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                    >
+                      <span>Skip to Next Slide</span>
+                      <ArrowRightIcon className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               )}
 
               {status === 'reveal' && (
-                <button
-                  type="button"
-                  onClick={handleShowLeaderboard}
-                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-base flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
-                >
-                  <TrophyIcon className="w-5 h-5" />
-                  <span>Present Scoreboard</span>
-                </button>
+                shouldShowScoreboard ? (
+                  <button
+                    type="button"
+                    onClick={handleShowLeaderboard}
+                    className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-base flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                  >
+                    <TrophyIcon className="w-5 h-5" />
+                    <span>Present Scoreboard</span>
+                  </button>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleNextQuestion}
+                      className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-base flex items-center justify-center gap-3 shadow-xl shadow-purple-600/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                    >
+                      <span>
+                        {currentQIndex + 1 < activeQuestions.length
+                          ? activeQuestions[currentQIndex + 1]?.type === 'splash'
+                            ? `Continue to: "${activeQuestions[currentQIndex + 1]?.title || 'Splash Screen'}"`
+                            : `Start Question ${currentQIndex + 2} of ${activeQuestions.length}`
+                          : 'Show Final Winner Podium'}
+                      </span>
+                      <ArrowRightIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleShowLeaderboard}
+                      title="Scoreboard is disabled for this question, but you can still view it if desired"
+                      className="w-full sm:w-auto px-3.5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                    >
+                      <TrophyIcon className="w-4 h-4 text-amber-400" />
+                      <span>Present Scoreboard Anyway</span>
+                    </button>
+                  </div>
+                )
               )}
 
               {status === 'leaderboard' && (
@@ -989,6 +1093,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
       {isQuizMakerOpen && (
         <QuizMaker
           initialQuestions={activeQuestions}
+          initialShowScoreboardAfterQuestion={showScoreboardAfterQuestion}
           onSaveQuiz={handleSaveQuiz}
           onClose={() => setIsQuizMakerOpen(false)}
         />
