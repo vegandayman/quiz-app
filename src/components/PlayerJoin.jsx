@@ -239,13 +239,15 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
     const currentQ = roomData.questions?.[currentQIndex];
     const isCorrect = choiceIndex === currentQ?.correctIndex;
 
-    // Use custom question points (defaults to 1000 if not specified in editor)
-    const maxPoints = currentQ?.points !== undefined ? currentQ.points : 1000;
+    // Use custom question points (defaults to 1 if not specified in editor)
+    const maxPoints = currentQ?.points !== undefined && currentQ.points !== '' ? Math.max(0, Number(currentQ.points)) : 1;
     const timeLimit = roomData.timeLimit || currentQ?.timeLimit || 20;
     const startTime = roomData.questionStartTime || Date.now();
     const timeElapsedSec = Math.max(0, (Date.now() - startTime) / 1000);
     const speedRatio = Math.max(0, Math.min(1, 1 - (timeElapsedSec / timeLimit) / 2));
-    const pointsAwarded = isCorrect ? Math.round(maxPoints * speedRatio) : 0;
+    const pointsAwarded = isCorrect
+      ? (maxPoints <= 1 ? maxPoints : Math.max(1, Math.round(maxPoints * speedRatio)))
+      : 0;
 
     setMyAnswer(choiceIndex);
 
@@ -427,7 +429,7 @@ export default function PlayerJoin({ initialRoomCode = '' }) {
                 <CheckCircleIcon className="w-16 h-16 text-emerald-400 mx-auto mb-3" />
                 <h2 className="text-2xl font-black text-white">Correct!</h2>
                 <p className="text-lg font-black text-emerald-400 mt-1">
-                  +{lastAnswerObj?.pointsAwarded ?? (currentQuestion?.points || 1000)} Points
+                  +{lastAnswerObj?.pointsAwarded ?? (currentQuestion?.points !== undefined ? currentQuestion.points : 1)} {Number(lastAnswerObj?.pointsAwarded ?? (currentQuestion?.points !== undefined ? currentQuestion.points : 1)) === 1 ? 'Point' : 'Points'}
                 </p>
                 <p className="text-xs text-slate-400 mt-2">
                   Total Score: <span className="text-purple-300 font-mono font-bold">{myPlayerObj?.score || 0} pts</span>

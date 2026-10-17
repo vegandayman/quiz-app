@@ -74,7 +74,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     if (initialQuestions && initialQuestions.length > 0) {
       return JSON.parse(JSON.stringify(initialQuestions)).map((q) => ({
         ...q,
-        points: q.points !== undefined ? q.points : 1000
+        points: q.points !== undefined && q.points !== '' ? Number(q.points) : 1
       }));
     }
     return [
@@ -83,7 +83,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
         question: 'What is the capital of France?',
         options: ['London', 'Paris', 'Berlin', 'Madrid'],
         correctIndex: 1,
-        points: 1000,
+        points: 1,
         secretNote: 'Paris has been the capital of France since 987 CE.',
         timeLimit: 20
       }
@@ -101,14 +101,14 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
     setTimeout(() => setNotification(''), 3000);
   };
 
-  // Add new blank question with default 1000 points
+  // Add new blank question with default 1 point
   const handleAddQuestion = () => {
     const newQuestion = {
       id: Date.now(),
       question: 'New Question',
       options: ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
       correctIndex: 0,
-      points: 1000,
+      points: 1,
       secretNote: '',
       timeLimit: 20
     };
@@ -196,7 +196,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
           question: q.question || `Question ${idx + 1}`,
           options: Array.isArray(q.options) && q.options.length >= 2 ? q.options.slice(0, 4) : ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
           correctIndex: typeof q.correctIndex === 'number' && q.correctIndex >= 0 && q.correctIndex < 4 ? q.correctIndex : 0,
-          points: typeof q.points === 'number' ? q.points : 1000,
+          points: typeof q.points === 'number' && !isNaN(q.points) ? Math.max(0, Math.min(100000, q.points)) : 1,
           secretNote: q.secretNote || '',
           timeLimit: q.timeLimit || 20
         }));
@@ -335,7 +335,7 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
 
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900/70 border border-slate-700/60 text-amber-300">
-                      {q.points ?? 1000}p
+                      {q.points !== undefined && q.points !== '' ? q.points : 1} {Number(q.points ?? 1) === 1 ? 'pt' : 'pts'}
                     </span>
 
                     {questions.length > 1 && (
@@ -377,21 +377,39 @@ export default function QuizMaker({ initialQuestions = [], onSaveQuiz, onClose }
               </span>
 
               <div className="flex items-center flex-wrap gap-4">
-                {/* Score / Points Picker */}
+                {/* Score / Points Numerical Input */}
                 <div className="flex items-center gap-2">
                   <AwardIcon className="w-4 h-4 text-amber-400" />
-                  <label className="text-xs text-slate-300 font-semibold">Points:</label>
-                  <select
-                    value={activeQ.points !== undefined ? activeQ.points : 1000}
-                    onChange={(e) => handleUpdateActiveQuestion('points', Number(e.target.value))}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-amber-400 outline-none focus:border-purple-500 cursor-pointer"
-                  >
-                    <option value={500}>500 pts</option>
-                    <option value={1000}>1,000 pts (Standard)</option>
-                    <option value={1500}>1,500 pts</option>
-                    <option value={2000}>2,000 pts (Double Points)</option>
-                    <option value={0}>0 pts (No Points)</option>
-                  </select>
+                  <label htmlFor="question-points-input" className="text-xs text-slate-300 font-semibold">Points:</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="question-points-input"
+                      type="number"
+                      min={0}
+                      max={100000}
+                      step={1}
+                      value={activeQ.points !== undefined ? activeQ.points : 1}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          handleUpdateActiveQuestion('points', '');
+                        } else {
+                          const num = Math.min(100000, Math.max(0, parseInt(raw, 10) || 0));
+                          handleUpdateActiveQuestion('points', num);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (activeQ.points === '' || activeQ.points === undefined || isNaN(Number(activeQ.points))) {
+                          handleUpdateActiveQuestion('points', 1);
+                        }
+                      }}
+                      className="w-20 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-amber-400 outline-none focus:border-purple-500 font-mono text-center"
+                      placeholder="1"
+                    />
+                    <span className="text-xs text-slate-400 font-semibold font-mono">
+                      {Number(activeQ.points ?? 1) === 1 ? 'pt' : 'pts'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Time limit picker */}

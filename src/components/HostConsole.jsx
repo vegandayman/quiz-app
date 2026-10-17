@@ -107,7 +107,7 @@ const defaultQuestions = [
     question: 'Which planet in our solar system has the most moons?',
     options: ['Jupiter', 'Saturn', 'Neptune', 'Mars'],
     correctIndex: 1,
-    points: 1000,
+    points: 1,
     secretNote: 'Saturn has 146 confirmed moons, overtaking Jupiter (95 moons) in 2023!',
     timeLimit: 20
   },
@@ -116,7 +116,7 @@ const defaultQuestions = [
     question: 'What was the first video game ever played in outer space?',
     options: ['Tetris', 'Pac-Man', 'Pong', 'Space Invaders'],
     correctIndex: 0,
-    points: 1000,
+    points: 1,
     secretNote: 'Russian cosmonaut Aleksandr Serebrov played Tetris on his Game Boy aboard the Mir Space Station in 1993.',
     timeLimit: 20
   },
@@ -125,7 +125,7 @@ const defaultQuestions = [
     question: 'How many hearts does an octopus have?',
     options: ['One', 'Two', 'Three', 'Four'],
     correctIndex: 2,
-    points: 1000,
+    points: 1,
     secretNote: 'Two hearts pump blood to the gills, while the third circulates it to the rest of the body.',
     timeLimit: 20
   },
@@ -134,7 +134,7 @@ const defaultQuestions = [
     question: 'Which programming language was created in only 10 days in May 1995?',
     options: ['Python', 'JavaScript', 'Java', 'PHP'],
     correctIndex: 1,
-    points: 1000,
+    points: 1,
     secretNote: 'Brendan Eich designed Mocha (which became JavaScript) in 10 days for Netscape Navigator.',
     timeLimit: 20
   }
@@ -478,7 +478,7 @@ export default function HostConsole({ onOpenDisplay, onRoomCodeReady }) {
                       <span>{timeLeft}s</span>
                     </span>
                     <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
-                      {activeQuestion.points !== undefined ? activeQuestion.points : 1000} pts
+                      {activeQuestion.points !== undefined && activeQuestion.points !== '' ? activeQuestion.points : 1} {Number(activeQuestion.points ?? 1) === 1 ? 'pt' : 'pts'}
                     </span>
                   </div>
 

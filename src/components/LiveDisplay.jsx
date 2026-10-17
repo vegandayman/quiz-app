@@ -399,7 +399,7 @@ export default function LiveDisplay({ roomCode: initialRoomCode = '' }) {
               Question {currentQIndex + 1} of {roomData.questions?.length || 1}
             </span>
             <span className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
-              {currentQuestion?.points !== undefined ? currentQuestion.points : 1000} pts
+              {currentQuestion?.points !== undefined && currentQuestion.points !== '' ? currentQuestion.points : 1} {Number(currentQuestion?.points ?? 1) === 1 ? 'pt' : 'pts'}
             </span>
           </div>
 
